@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <GL/glew.h>
+#include <GLFW/glfw3.h>
 
 typedef struct {
     uint8_t V[16], delay_timer, sound_timer;
@@ -8,21 +10,26 @@ typedef struct {
 } cpu_registers;
 
 typedef struct {
-    uint8_t memory[4096], display_buffer[64][32], key_input[16];
+    uint8_t memory[4096], key_input[16];
+    GLubyte display_buffer[64 * 32 * 3]; // 64 x 32 over 3 color channels
     cpu_registers registers;
 } chip8_cpu;
 
 void _00E0(chip8_cpu *cpu_ptr) {
     for (int i = 0; i < 64; i++) {
         for (int j = 0; j < 32; j++) {
-            cpu_ptr->display_buffer[i][j] = 0;
+            cpu_ptr->display_buffer[(i * 32 + j) * 3 + 0] = 0; // R
+            cpu_ptr->display_buffer[(i * 32 + j) * 3 + 1] = 0; // G
+            cpu_ptr->display_buffer[(i * 32 + j) * 3 + 2] = 0; // B
         }
     }
+    cpu_ptr->registers.program_counter += 2;
 }
 
 void _00EE(chip8_cpu *cpu_ptr) {
+    cpu_ptr->registers.stack_ptr -= 1;
     cpu_ptr->registers.program_counter = cpu_ptr->registers.stack[cpu_ptr->registers.stack_ptr];
-    --cpu_ptr->registers.stack_ptr;
+    cpu_ptr->registers.program_counter += 2;
 }
 
 void _1nnn(chip8_cpu *cpu_ptr, uint16_t lowest_12_bits) {
@@ -30,31 +37,31 @@ void _1nnn(chip8_cpu *cpu_ptr, uint16_t lowest_12_bits) {
 }
 
 void _2nnn(chip8_cpu *cpu_ptr, uint16_t lowest_12_bits) {
-    cpu_ptr->registers.stack_ptr++;
     cpu_ptr->registers.stack[cpu_ptr->registers.stack_ptr] = cpu_ptr->registers.program_counter;
+    cpu_ptr->registers.stack_ptr += 1;
     cpu_ptr->registers.program_counter = lowest_12_bits;
 }
 
-void _3xkk(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t low_byte)
-{
-    if (cpu_ptr->registers.V[lower_high_byte] == low_byte)
-    {
+void _3xkk(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t low_byte) {
+    if (cpu_ptr->registers.V[lower_high_byte] == low_byte) {
+        cpu_ptr->registers.program_counter += 4;
+    } else {
         cpu_ptr->registers.program_counter += 2;
     }
 }
 
-void _4xkk(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t low_byte)
-{
-    if (cpu_ptr->registers.V[lower_high_byte] != low_byte)
-    {
+void _4xkk(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t low_byte) {
+    if (cpu_ptr->registers.V[lower_high_byte] != low_byte) {
+        cpu_ptr->registers.program_counter += 4;
+    } else {
         cpu_ptr->registers.program_counter += 2;
     }
 }
 
-void _5xy0(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t upper_lower_byte)
-{
-    if (cpu_ptr->registers.V[lower_high_byte] == cpu_ptr->registers.V[upper_lower_byte])
-    {
+void _5xy0(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t upper_lower_byte) {
+    if (cpu_ptr->registers.V[lower_high_byte] == cpu_ptr->registers.V[upper_lower_byte]) {
+        cpu_ptr->registers.program_counter += 4;
+    } else {
         cpu_ptr->registers.program_counter += 2;
     }
 }
@@ -62,27 +69,33 @@ void _5xy0(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t upper_lower_byte
 void _6xkk(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t low_byte)
 {
     cpu_ptr->registers.V[lower_high_byte] = low_byte;
+    cpu_ptr->registers.program_counter += 2;
 }
 
 void _7xkk(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t low_byte)
 {
     cpu_ptr->registers.V[lower_high_byte] += low_byte;
+    cpu_ptr->registers.program_counter += 2;
 }
 
 void _8xy0(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t upper_low_byte) {
     cpu_ptr->registers.V[lower_high_byte] = cpu_ptr->registers.V[upper_low_byte];
+    cpu_ptr->registers.program_counter += 2;
 }
 
 void _8xy1(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t upper_low_byte) {
     cpu_ptr->registers.V[lower_high_byte] = cpu_ptr->registers.V[lower_high_byte] | cpu_ptr->registers.V[upper_low_byte];
+    cpu_ptr->registers.program_counter += 2;
 }
 
 void _8xy2(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t upper_low_byte) {
     cpu_ptr->registers.V[lower_high_byte] = cpu_ptr->registers.V[lower_high_byte] & cpu_ptr->registers.V[upper_low_byte];
+    cpu_ptr->registers.program_counter += 2;
 }
 
 void _8xy3(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t upper_low_byte) {
     cpu_ptr->registers.V[lower_high_byte] = cpu_ptr->registers.V[lower_high_byte] ^ cpu_ptr->registers.V[upper_low_byte];
+    cpu_ptr->registers.program_counter += 2;
 }
 
 void _8xy4(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t upper_low_byte) {
@@ -91,7 +104,10 @@ void _8xy4(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t upper_low_byte) 
     uint16_t carry = sum & 0xF00;
     if (carry) {
         cpu_ptr->registers.V[16] = 1;
+    } else {
+        cpu_ptr->registers.V[16] = 0;
     }
+    cpu_ptr->registers.program_counter += 2;
 }
 
 void _8xy5(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t upper_low_byte) {
@@ -101,6 +117,7 @@ void _8xy5(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t upper_low_byte) 
         cpu_ptr->registers.V[16] = 0;
     }
     cpu_ptr->registers.V[lower_high_byte] = (cpu_ptr->registers.V[lower_high_byte] - cpu_ptr->registers.V[upper_low_byte]) & 0xFF;
+    cpu_ptr->registers.program_counter += 2;
 }
 
 void _8xy6(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t upper_low_byte) {
@@ -108,6 +125,7 @@ void _8xy6(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t upper_low_byte) 
         cpu_ptr->registers.V[16] = 1;
     }
     cpu_ptr->registers.V[lower_high_byte] = cpu_ptr->registers.V[lower_high_byte] >> 2;
+    cpu_ptr->registers.program_counter += 2;
 }
 
 void _8xy7(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t upper_low_byte) {
@@ -116,7 +134,8 @@ void _8xy7(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t upper_low_byte) 
     } else {
         cpu_ptr->registers.V[16] = 0;
     }
-    cpu_ptr->registers.V[lower_high_byte] = (cpu_ptr->registers.V[upper_low_byte] - cpu_ptr->registers.V[lower_high_byte]) & 0xFF;    
+    cpu_ptr->registers.V[lower_high_byte] = (cpu_ptr->registers.V[upper_low_byte] - cpu_ptr->registers.V[lower_high_byte]) & 0xFF;
+    cpu_ptr->registers.program_counter += 2;
 }
 
 void _8xyE(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t upper_low_byte) {
@@ -125,12 +144,15 @@ void _8xyE(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t upper_low_byte) 
     } else {
         cpu_ptr->registers.V[16] = 0;
     }
+    cpu_ptr->registers.program_counter += 2;
 }
 
 void _9xy0(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t upper_lower_byte)
 {
     if (cpu_ptr->registers.V[lower_high_byte] != cpu_ptr->registers.V[upper_lower_byte])
     {
+        cpu_ptr->registers.program_counter += 4;
+    } else {
         cpu_ptr->registers.program_counter += 2;
     }
 }
@@ -138,6 +160,7 @@ void _9xy0(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t upper_lower_byte
 void _Annn(chip8_cpu *cpu_ptr, uint16_t lowest_12_bits)
 {
     cpu_ptr->registers.I = lowest_12_bits;
+    cpu_ptr->registers.program_counter += 2;
 }
 
 void _Bnnn(chip8_cpu *cpu_ptr, uint16_t lowest_12_bits)
@@ -147,6 +170,7 @@ void _Bnnn(chip8_cpu *cpu_ptr, uint16_t lowest_12_bits)
 
 void _Cxkk(chip8_cpu *cpu_ptr, uint8_t lower_high_byte, uint8_t low_byte) {
     cpu_ptr->registers.V[lower_high_byte] = (rand() % 256) & low_byte; // Modulo operator to keep the random number in the 8 bit range
+    cpu_ptr->registers.program_counter += 2;
 }
 
 void _Dxyn() {
@@ -155,54 +179,73 @@ void _Dxyn() {
 
 void _Ex9E(chip8_cpu *cpu_ptr, uint8_t lower_high_byte) {
     if (cpu_ptr->key_input[lower_high_byte]) {
+        cpu_ptr->registers.program_counter += 4;
+    } else {
         cpu_ptr->registers.program_counter += 2;
     }
 }
 
 void _ExA1(chip8_cpu *cpu_ptr, uint8_t lower_high_byte) {
     if (!cpu_ptr->key_input[lower_high_byte]) {
+        cpu_ptr->registers.program_counter += 4;
+    } else {
         cpu_ptr->registers.program_counter += 2;
     }
 }
 
 void _Fx07(chip8_cpu *cpu_ptr, uint8_t lower_high_byte) {
     cpu_ptr->registers.V[lower_high_byte] = cpu_ptr->registers.delay_timer;
+    cpu_ptr->registers.program_counter += 2;
 }
 
 void _Fx0A(chip8_cpu *cpu_ptr, uint8_t lower_high_byte) {
     printf("Not implemented.\n");
+    cpu_ptr->registers.program_counter += 2;
 }
 
 void _Fx15(chip8_cpu *cpu_ptr, uint8_t lower_high_byte) {
     cpu_ptr->registers.delay_timer = cpu_ptr->registers.V[lower_high_byte];
+    cpu_ptr->registers.program_counter += 2;
 }
 
 void _Fx18(chip8_cpu *cpu_ptr, uint8_t lower_high_byte) {
     cpu_ptr->registers.sound_timer = cpu_ptr->registers.V[lower_high_byte];
+    cpu_ptr->registers.program_counter += 2;
 }
 
 void _Fx1E(chip8_cpu *cpu_ptr, uint8_t lower_high_byte) {
     cpu_ptr->registers.I = cpu_ptr->registers.I + cpu_ptr->registers.V[lower_high_byte];
+    cpu_ptr->registers.program_counter += 2;
 }
 
 void _Fx29(chip8_cpu *cpu_ptr, uint8_t lower_high_byte) {
-    printf("Not implemented.\n");
+    cpu_ptr->registers.I = 5*(cpu_ptr->registers.V[lower_high_byte]) & 0xFFF;
+    cpu_ptr->registers.program_counter += 2;
 }
 
 void _Fx33(chip8_cpu *cpu_ptr, uint8_t lower_high_byte) {
-    printf("Not implemented.\n");
+    cpu_ptr->memory[cpu_ptr->registers.I] = lower_high_byte / 100;
+    cpu_ptr->memory[cpu_ptr->registers.I + 1] = (lower_high_byte % 100) / 10;
+    cpu_ptr->memory[cpu_ptr->registers.I + 2] = lower_high_byte % 10;
+    cpu_ptr->registers.program_counter += 2;
 }
 
 void _Fx55(chip8_cpu *cpu_ptr, uint8_t lower_high_byte) {
     for (int i = 0; i < 16; i++) {
         cpu_ptr->memory[cpu_ptr->registers.I + i] = cpu_ptr->registers.V[i];
     }
+    cpu_ptr->registers.program_counter += 2;
 }
 
 void _Fx65(chip8_cpu *cpu_ptr, uint8_t lower_high_byte) {
     for (int i = 0; i < 16; i++) {
         cpu_ptr->registers.V[i] = cpu_ptr->memory[cpu_ptr->registers.I + i];
     }
+    cpu_ptr->registers.program_counter += 2;
+}
+
+void key_callback(GLFWwindow *window_ptr, int key, int scancode, int action, int mods) {
+
 }
 
 chip8_cpu init(void) {
@@ -211,7 +254,9 @@ chip8_cpu init(void) {
 
     for (i = 0; i < 64; i++) {
         for (j = 0; j < 32; j++) {
-            CPU.display_buffer[i][j] = 0x0;
+            CPU.display_buffer[(i * 32 + j) * 3 + 0] = 0; // R
+            CPU.display_buffer[(i * 32 + j) * 3 + 1] = 0; // G
+            CPU.display_buffer[(i * 32 + j) * 3 + 2] = 0; // B
         }
     }
 
@@ -255,7 +300,7 @@ int load_rom(chip8_cpu *cpu_ptr, const char *path) {
         }
     }
 
-    // Moves file pointer back to the file beggining
+    // Moves file pointer back to the file start
     if (fseek(file_ptr, 0, SEEK_SET) != 0) {
         fclose(file_ptr);
         return -1;
@@ -271,33 +316,33 @@ int load_rom(chip8_cpu *cpu_ptr, const char *path) {
     return 0;
 }
 
-void draw_screen(chip8_cpu *cpu_ptr)
-{
-    for (int i = 0; i < 64; i++)
-    {
-        for (int j = 0; j < 32; j++)
-        {
-            if (cpu_ptr->display_buffer[i][j] == 1)
-            {
-                printf("@");
-                continue;
-            }
-            printf(" ");
-        }
-        printf("\n");
-    }
-}
+int main(int argc, char **argv) {
 
-int main(void) {
+    // Initialize GLFW lib
+    if (!glfwInit()) {
+        printf("Failed to initialize GLFW.\n");
+        return -1;
+    }
+
+    // Create window and it's OpenGL context
+    GLFWwindow *win = glfwCreateWindow(64, 32, "Chip8 Emulator", NULL, NULL);
+
+    if (!win) {
+        glfwTerminate();
+        printf("Failed to create a window.\n");
+        return -1;
+    }
+
+    glfwMakeContextCurrent(win);
 
     chip8_cpu CPU = init();
     char *path = "Cave.ch8";
     load_rom(&CPU, path);
     uint16_t opcode, left_nibble, right_nibble, lowest_12_bits;
     uint8_t lower_high_byte, upper_low_byte, low_byte;
+
     // Main emulator loop
-    int shouldExit = 0;
-    while (!shouldExit) {
+    while (!glfwWindowShouldClose(win)) {
         CPU.registers.program_counter += 2;
         // 8-bit shift to the left on the 8-byte sized region of memory pointed at by the pc to put it in the format 0xXX00
         left_nibble = CPU.memory[CPU.registers.program_counter] << 8;
@@ -435,12 +480,17 @@ int main(void) {
                 }
                 break;
             default:
-                printf("A instrução %#x não foi encontrada, abortando a executação.\n", opcode);
-                shouldExit = 1;
                 break;
         }
-        // draw_screen(&CPU);
+        
+        glClear(GL_COLOR_BUFFER_BIT);
+        glfwSwapBuffers(win);
+        glfwPollEvents();
+
     }
+
+    glfwDestroyWindow(win);
+    glfwTerminate();
 
     return 0;
 }
