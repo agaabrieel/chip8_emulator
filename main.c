@@ -244,7 +244,103 @@ void _Fx65(chip8_cpu *cpu_ptr, uint8_t lower_high_byte) {
     cpu_ptr->registers.program_counter += 2;
 }
 
-void key_callback(GLFWwindow *window_ptr, int key, int scancode, int action, int mods) {
+void update_keypad_state(chip8_cpu *cpu_ptr, GLFWwindow *window_ptr) {
+
+    if (glfwGetKey(window_ptr, GLFW_KEY_1) == GLFW_PRESS) {
+        cpu_ptr->key_input[0x0] = 1;
+    } else {
+        cpu_ptr->key_input[0x0] = 0;
+    }
+
+    if (glfwGetKey(window_ptr, GLFW_KEY_2) == GLFW_PRESS) {
+        cpu_ptr->key_input[0x1] = 1;
+    } else {
+        cpu_ptr->key_input[0x1] = 0;
+    }
+
+    if (glfwGetKey(window_ptr, GLFW_KEY_3) == GLFW_PRESS) {
+        cpu_ptr->key_input[0x2] = 1;
+    } else {
+        cpu_ptr->key_input[0x2] = 0;
+    }
+
+    if (glfwGetKey(window_ptr, GLFW_KEY_4) == GLFW_PRESS) {
+        cpu_ptr->key_input[0x3] = 1;
+    } else {
+        cpu_ptr->key_input[0x3] = 0;
+    }
+
+    if (glfwGetKey(window_ptr, GLFW_KEY_Q) == GLFW_PRESS) {
+        cpu_ptr->key_input[0x4] = 1;
+    } else {
+        cpu_ptr->key_input[0x4] = 0;
+    }
+
+    if (glfwGetKey(window_ptr, GLFW_KEY_W) == GLFW_PRESS) {
+        cpu_ptr->key_input[0x5] = 1;
+    } else {
+        cpu_ptr->key_input[0x5] = 0;
+    }
+
+    if (glfwGetKey(window_ptr, GLFW_KEY_E) == GLFW_PRESS) {
+        cpu_ptr->key_input[0x6] = 1;
+    } else {
+        cpu_ptr->key_input[0x6] = 0;
+    }
+
+    if (glfwGetKey(window_ptr, GLFW_KEY_R) == GLFW_PRESS) {
+        cpu_ptr->key_input[0x7] = 1;
+    } else {
+        cpu_ptr->key_input[0x7] = 0;
+    }
+
+    if (glfwGetKey(window_ptr, GLFW_KEY_A) == GLFW_PRESS) {
+        cpu_ptr->key_input[0x8] = 1;
+    } else {
+        cpu_ptr->key_input[0x8] = 0;
+    }
+
+    if (glfwGetKey(window_ptr, GLFW_KEY_S) == GLFW_PRESS) {
+        cpu_ptr->key_input[0x9] = 1;
+    } else {
+        cpu_ptr->key_input[0x9] = 0;
+    }
+
+    if (glfwGetKey(window_ptr, GLFW_KEY_D) == GLFW_PRESS) {
+        cpu_ptr->key_input[0xA] = 1;
+    } else {
+        cpu_ptr->key_input[0xA] = 0;
+    }
+
+    if (glfwGetKey(window_ptr, GLFW_KEY_F) == GLFW_PRESS) {
+        cpu_ptr->key_input[0xB] = 1;
+    } else {
+        cpu_ptr->key_input[0xB] = 0;
+    }
+
+    if (glfwGetKey(window_ptr, GLFW_KEY_Z) == GLFW_PRESS) {
+        cpu_ptr->key_input[0xC] = 1;
+    } else {
+        cpu_ptr->key_input[0xC] = 0;
+    }
+
+    if (glfwGetKey(window_ptr, GLFW_KEY_X) == GLFW_PRESS) {
+        cpu_ptr->key_input[0xD] = 1;
+    } else {
+        cpu_ptr->key_input[0xD] = 0;
+    }
+
+    if (glfwGetKey(window_ptr, GLFW_KEY_C) == GLFW_PRESS) {
+        cpu_ptr->key_input[0xE] = 1;
+    } else {
+        cpu_ptr->key_input[0xE] = 0;
+    }
+
+    if (glfwGetKey(window_ptr, GLFW_KEY_V) == GLFW_PRESS) {
+        cpu_ptr->key_input[0xF] = 1;
+    } else {
+        cpu_ptr->key_input[0xF] = 0;
+    }
 
 }
 
@@ -333,27 +429,27 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    glfwSetInputMode(win, GLFW_STICKY_KEYS, GLFW_TRUE);
     glfwMakeContextCurrent(win);
 
     chip8_cpu CPU = init();
     char *path = "Cave.ch8";
     load_rom(&CPU, path);
-    uint16_t opcode, left_nibble, right_nibble, lowest_12_bits;
-    uint8_t lower_high_byte, upper_low_byte, low_byte;
+    uint16_t opcode, left_two_nibbles, right_two_nibbles, lowest_12_bits;
+    uint8_t upper_byte_low_nibble, low_byte_upper_nibble, low_byte;
 
     // Main emulator loop
     while (!glfwWindowShouldClose(win)) {
-        CPU.registers.program_counter += 2;
         // 8-bit shift to the left on the 8-byte sized region of memory pointed at by the pc to put it in the format 0xXX00
-        left_nibble = CPU.memory[CPU.registers.program_counter] << 8;
+        left_two_nibbles = CPU.memory[CPU.registers.program_counter] << 8;
         // Move the index by 1 (8 bytes) to get the second 8-byte sized part of the instruction as 0xXX
-        right_nibble = CPU.memory[CPU.registers.program_counter + 1];
+        right_two_nibbles = CPU.memory[CPU.registers.program_counter + 1];
         // Perform bitwise OR on both to get the full 16 bytes instruction
-        opcode = left_nibble | right_nibble;
+        opcode = left_two_nibbles | right_two_nibbles;
         // Get the lower 4 bits (nibble/hex digit) of the high byte through a bitwise AND and a bitwise right shift by 1 byte
-        lower_high_byte = (opcode & 0x0F00) >> 8;
+        upper_byte_low_nibble = (opcode & 0x0F00) >> 8;
         // Get the upper 4 bits (nibble/hex digit) of the low byte through a bitwise AND and a bitwise right shift by half a byte
-        upper_low_byte = (opcode & 0x00F0) >> 4;
+        low_byte_upper_nibble = (opcode & 0x00F0) >> 4;
         // Get the low byte and the lowest 12 bits through bitwise AND
         lowest_12_bits = opcode & 0x0FFF;
         low_byte = opcode & 0x00FF;
@@ -378,53 +474,53 @@ int main(int argc, char **argv) {
                 _2nnn(&CPU, lowest_12_bits);
                 break;
             case 0x3000:
-                _3xkk(&CPU, lower_high_byte, low_byte);
+                _3xkk(&CPU, upper_byte_low_nibble, low_byte);
                 break;
             case 0x4000:
-                _4xkk(&CPU, lower_high_byte, low_byte);
+                _4xkk(&CPU, upper_byte_low_nibble, low_byte);
                 break;
             case 0x5000:
-                _5xy0(&CPU, lower_high_byte, upper_low_byte);
+                _5xy0(&CPU, upper_byte_low_nibble, low_byte_upper_nibble);
                 break;
             case 0x6000:
-                _6xkk(&CPU, lower_high_byte, low_byte);
+                _6xkk(&CPU, upper_byte_low_nibble, low_byte);
                 break;
             case 0x7000:
-                _7xkk(&CPU, lower_high_byte, low_byte);
+                _7xkk(&CPU, upper_byte_low_nibble, low_byte);
                 break;
             case 0x8000:
                 switch (opcode & 0x000F) {
                     case 0x0000:
-                        _8xy0(&CPU, lower_high_byte, upper_low_byte);
+                        _8xy0(&CPU, upper_byte_low_nibble, low_byte_upper_nibble);
                         break;
                     case 0x0001:
-                        _8xy1(&CPU, lower_high_byte, upper_low_byte);
+                        _8xy1(&CPU, upper_byte_low_nibble, low_byte_upper_nibble);
                         break;
                     case 0x0002:
-                        _8xy2(&CPU, lower_high_byte, upper_low_byte);
+                        _8xy2(&CPU, upper_byte_low_nibble, low_byte_upper_nibble);
                         break;
                     case 0x0003:
-                        _8xy3(&CPU, lower_high_byte, upper_low_byte);
+                        _8xy3(&CPU, upper_byte_low_nibble, low_byte_upper_nibble);
                         break;
                     case 0x0004:
-                        _8xy4(&CPU, lower_high_byte, upper_low_byte);
+                        _8xy4(&CPU, upper_byte_low_nibble, low_byte_upper_nibble);
                         break;
                     case 0x0005:
-                        _8xy5(&CPU, lower_high_byte, upper_low_byte);
+                        _8xy5(&CPU, upper_byte_low_nibble, low_byte_upper_nibble);
                         break;
                     case 0x0006:
-                        _8xy6(&CPU, lower_high_byte, upper_low_byte);
+                        _8xy6(&CPU, upper_byte_low_nibble, low_byte_upper_nibble);
                         break;
                     case 0x0007:
-                        _8xy7(&CPU, lower_high_byte, upper_low_byte);
+                        _8xy7(&CPU, upper_byte_low_nibble, low_byte_upper_nibble);
                         break;
                     case 0x000E:
-                        _8xyE(&CPU, lower_high_byte, upper_low_byte);
+                        _8xyE(&CPU, upper_byte_low_nibble, low_byte_upper_nibble);
                         break;
                 }
                 break;
             case 0x9000:
-                _9xy0(&CPU, lower_high_byte, upper_low_byte);
+                _9xy0(&CPU, upper_byte_low_nibble, low_byte_upper_nibble);
                 break;
             case 0xA000:
                 _Annn(&CPU, lowest_12_bits);
@@ -433,59 +529,62 @@ int main(int argc, char **argv) {
                 _Bnnn(&CPU, lowest_12_bits);
                 break;
             case 0xC000:
-                _Cxkk(&CPU, lower_high_byte, low_byte);
+                _Cxkk(&CPU, upper_byte_low_nibble, low_byte);
                 break;
             case 0xD000:
-                _Dxyn(&CPU, lower_high_byte, upper_low_byte);
+                _Dxyn(&CPU, upper_byte_low_nibble, low_byte_upper_nibble);
                 break;
             case 0xE000:
                 switch (opcode & 0x00FF) {
                     case 0x009E:
-                        _Ex9E(&CPU, lower_high_byte);
+                        _Ex9E(&CPU, upper_byte_low_nibble);
                         break;
                     case 0x00A1:
-                        _ExA1(&CPU, lower_high_byte);
+                        _ExA1(&CPU, upper_byte_low_nibble);
                         break;
                 }
                 break;
             case 0xF000:
                 switch (opcode & 0x00FF) {
                     case 0x0007:
-                        _Fx07(&CPU, lower_high_byte);
+                        _Fx07(&CPU, upper_byte_low_nibble);
                         break;
                     case 0x000A:
-                        _Fx0A(&CPU, lower_high_byte);
+                        _Fx0A(&CPU, upper_byte_low_nibble);
                         break;
                     case 0x0015:
-                        _Fx15(&CPU, lower_high_byte);
+                        _Fx15(&CPU, upper_byte_low_nibble);
                         break;
                     case 0x0018:
-                        _Fx18(&CPU, lower_high_byte);
+                        _Fx18(&CPU, upper_byte_low_nibble);
                         break;
                     case 0x001E:
-                        _Fx1E(&CPU, lower_high_byte);
+                        _Fx1E(&CPU, upper_byte_low_nibble);
                         break;
                     case 0x0029:
-                        _Fx29(&CPU, lower_high_byte);
+                        _Fx29(&CPU, upper_byte_low_nibble);
                         break;
                     case 0x0033:
-                        _Fx33(&CPU, lower_high_byte);
+                        _Fx33(&CPU, upper_byte_low_nibble);
                         break;
                     case 0x0055:
-                        _Fx55(&CPU, lower_high_byte);
+                        _Fx55(&CPU, upper_byte_low_nibble);
                         break;
                     case 0x0065:
-                        _Fx65(&CPU, lower_high_byte);
+                        _Fx65(&CPU, upper_byte_low_nibble);
                         break;
                 }
                 break;
             default:
                 break;
         }
-        
+
+        // Update the keypad state
+        update_keypad_state(&CPU, win);
+
+        // Clear the color buffer and swap the front and back buffers        
         glClear(GL_COLOR_BUFFER_BIT);
         glfwSwapBuffers(win);
-        glfwPollEvents();
 
     }
 
